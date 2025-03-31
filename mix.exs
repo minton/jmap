@@ -37,6 +37,7 @@ defmodule Jmap.MixProject do
   defp docs do
     [
       main: "Jmap",
+      source_ref: "v#{@version}",
       source_url: @github_url,
       homepage_url: @github_url
     ]
