@@ -2,11 +2,12 @@ defmodule Jmap.MixProject do
   use Mix.Project
 
   @github_url "https://github.com/minton/jmap"
+  @version "0.0.2"
 
   def project do
     [
       app: :jmap,
-      version: "0.0.1",
+      version: @version,
       elixir: "~> 1.12",
       start_permanent: Mix.env() == :prod,
       deps: deps(),

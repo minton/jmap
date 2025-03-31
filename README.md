@@ -8,7 +8,7 @@ The package can be installed by adding `jmap` to your list of dependencies in `m
 ```elixir
 def deps do
   [
-    {:jmap, "~> 0.0.1"}
+    {:jmap, "~> 0.0.2"}
   ]
 end
 ```
