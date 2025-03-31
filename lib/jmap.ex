@@ -19,6 +19,20 @@ defmodule Jmap do
     api_token: "your_api_token"
   ```
 
+  ### HTTP Client
+
+  The library uses Erlang's built-in `:httpc` module by default. If you want to use the more feature-rich `req` package instead, simply add it as a dependency:
+
+  ```elixir
+  defp deps do
+    [
+      {:req, "~> 0.5.10 or ~> 0.6 or ~> 1.0"}
+    ]
+  end
+  ```
+
+  The library will automatically use `req` if it's available, falling back to `:httpc` if it's not.
+
 
   ## Creating a client
 
