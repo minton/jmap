@@ -50,7 +50,7 @@ defmodule Jmap.MixProject do
 
   defp deps do
     [
-      {:req, "~> 0.4.0"},
+      {:req, "~> 0.5.10 or ~> 0.6 or ~> 1.0", optional: true},
       {:jason, ">= 0.0.0"},
       {:mox, "~> 1.1", only: :test},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}

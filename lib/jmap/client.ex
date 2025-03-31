@@ -236,7 +236,7 @@ defmodule Jmap.Client do
       {"Authorization", "Bearer #{client.api_token}"}
     ]
 
-    http_client = Application.get_env(:jmap, :http_client, Jmap.HttpClient.Req)
+    http_client = get_http_client()
 
     case http_client.get(download_url, headers: headers) do
       {:ok, %{status: 200, body: content}} ->
@@ -303,11 +303,9 @@ defmodule Jmap.Client do
   # Private functions
 
   defp authenticate(client) do
-    headers = [
-      {"Authorization", "Bearer #{client.api_token}"}
-    ]
+    headers = [{"Authorization", "Bearer #{client.api_token}"}]
 
-    http_client = Application.get_env(:jmap, :http_client, Jmap.HttpClient.Req)
+    http_client = get_http_client()
 
     case http_client.get(client.api_url, headers: headers) do
       {:ok, %{status: 200, body: session}} ->
@@ -364,7 +362,7 @@ defmodule Jmap.Client do
       {"Content-Type", "application/json"}
     ]
 
-    http_client = Application.get_env(:jmap, :http_client, Jmap.HttpClient.Req)
+    http_client = get_http_client()
 
     case http_client.post(api_url, request, headers: headers) do
       {:ok, %{status: 200, body: %{"methodResponses" => [["Mailbox/get", result, "a"]]}}} ->
@@ -400,7 +398,7 @@ defmodule Jmap.Client do
       {"Content-Type", "application/json"}
     ]
 
-    http_client = Application.get_env(:jmap, :http_client, Jmap.HttpClient.Req)
+    http_client = get_http_client()
 
     case http_client.post(client.session_url, request, headers: headers) do
       {:ok, %{status: 200, body: %{"methodResponses" => [[_method_name, result, _id]]}}} ->
@@ -411,6 +409,14 @@ defmodule Jmap.Client do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp get_http_client do
+    if Code.ensure_loaded?(Req) do
+      Jmap.HttpClient.Req
+    else
+      Jmap.HttpClient.Web
     end
   end
 end
