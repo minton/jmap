@@ -10,7 +10,8 @@ defmodule Jmap.Client do
     :session_url,
     :account_id,
     :inbox_id,
-    :archive_id
+    :archive_id,
+    :download_url
   ]
 
   @fastmail_api_url "https://api.fastmail.com/jmap/session"
@@ -55,17 +56,31 @@ defmodule Jmap.Client do
   def new(api_token, provider, options \\ [])
 
   def new(api_token, provider, options) when is_atom(provider) do
-    api_url = Keyword.get(options, :api_url, @fastmail_api_url)
+    api_url =
+      case provider do
+        :fastmail ->
+          Keyword.get(options, :api_url, @fastmail_api_url)
 
-    client = %__MODULE__{
-      api_token: api_token,
-      provider: provider,
-      api_url: api_url
-    }
+        _ ->
+          Keyword.get(options, :api_url) ||
+            {:error, "API URL must be provided for provider: #{inspect(provider)}"}
+      end
 
-    case authenticate(client) do
-      {:ok, authenticated_client} -> {:ok, authenticated_client}
-      {:error, reason} -> {:error, reason}
+    case api_url do
+      {:error, reason} ->
+        {:error, reason}
+
+      url ->
+        client = %__MODULE__{
+          api_token: api_token,
+          provider: provider,
+          api_url: url
+        }
+
+        case authenticate(client) do
+          {:ok, authenticated_client} -> {:ok, authenticated_client}
+          {:error, reason} -> {:error, reason}
+        end
     end
   end
 
@@ -252,9 +267,13 @@ defmodule Jmap.Client do
       {:ok, <<...>>}
   """
   def fetch_blob(client, blob_id, type \\ "application/octet-stream") do
-    # The download URL is in the session response, but we need to replace placeholders
+    # Replace placeholders in the download URL from the session response
     download_url =
-      "https://www.fastmailusercontent.com/jmap/download/#{client.account_id}/#{blob_id}/content"
+      client.download_url
+      |> String.replace("{accountId}", client.account_id)
+      |> String.replace("{blobId}", blob_id)
+      |> String.replace("{name}", "content")
+      |> String.replace("{type}", type)
 
     headers = [
       {"Authorization", "Bearer #{client.api_token}"}
@@ -352,7 +371,8 @@ defmodule Jmap.Client do
                | session_url: session["apiUrl"],
                  account_id: account_id,
                  inbox_id: inbox_id,
-                 archive_id: archive_id
+                 archive_id: archive_id,
+                 download_url: session["downloadUrl"]
              }}
           else
             {:error, reason} -> {:error, reason}
@@ -437,10 +457,11 @@ defmodule Jmap.Client do
   end
 
   defp get_http_client do
-    if Code.ensure_loaded?(Req) do
-      Jmap.HttpClient.Req
-    else
-      Jmap.HttpClient.Web
-    end
+    Application.get_env(:jmap, :http_client) ||
+      if Code.ensure_loaded?(Req) do
+        Jmap.HttpClient.Req
+      else
+        Jmap.HttpClient.Web
+      end
   end
 end

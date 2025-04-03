@@ -1,8 +1,5 @@
 import Config
 
-# Configure the mock HTTP client for testing
-config :jmap, :http_client, Jmap.Support.MockHttpClient
-
 # Configure test environment
 config :jmap,
   api_token: "test-token",
