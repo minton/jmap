@@ -14,10 +14,11 @@ defmodule Jmap.Email do
   - from: List of sender email addresses
   - to: List of recipient email addresses
   - received_at: Timestamp when the email was received
-  - text_body: Plain text version of the email body
-  - html_body: HTML version of the email body
+  - text_body: List of plain text versions of the email body
+  - html_body: List of HTML versions of the email body
   - attachments: List of files attached to the email
   - thread_id: Identifier for the conversation thread this email belongs to
+  - original_quote: The quoted text from previous emails in the thread
   """
   @type t :: %__MODULE__{
           id: String.t(),
@@ -25,10 +26,11 @@ defmodule Jmap.Email do
           from: [EmailAddress.t()],
           to: [EmailAddress.t()],
           received_at: String.t(),
-          text_body: EmailBody.t() | nil,
-          html_body: EmailBody.t() | nil,
+          text_body: [EmailBody.t()],
+          html_body: [EmailBody.t()],
           attachments: [Attachment.t()],
-          thread_id: String.t()
+          thread_id: String.t(),
+          original_quote: EmailBody.t() | nil
         }
 
   @typedoc """
@@ -112,7 +114,8 @@ defmodule Jmap.Email do
     :text_body,
     :html_body,
     :attachments,
-    :thread_id
+    :thread_id,
+    :original_quote
   ]
 
   @doc """
@@ -128,7 +131,10 @@ defmodule Jmap.Email do
       ...>   "from" => [%{"email" => "sender@example.com", "name" => "Sender"}],
       ...>   "to" => [%{"email" => "recipient@example.com", "name" => "Recipient"}],
       ...>   "receivedAt" => "2024-01-01T00:00:00Z",
-      ...>   "textBody" => %{"blobId" => "blob123", "type" => "text/plain"},
+      ...>   "textBody" => [
+      ...>     %{"blobId" => "blob123", "type" => "text/plain"},
+      ...>     %{"blobId" => "blob124", "type" => "text/plain"}
+      ...>   ],
       ...>   "threadId" => "thread123"
       ...> }
       iex> Email.new(data)
@@ -138,24 +144,53 @@ defmodule Jmap.Email do
         from: [%EmailAddress{email: "sender@example.com", name: "Sender"}],
         to: [%EmailAddress{email: "recipient@example.com", name: "Recipient"}],
         received_at: "2024-01-01T00:00:00Z",
-        text_body: %EmailBody{blob_id: "blob123", type: "text/plain", contents: nil},
-        html_body: nil,
+        text_body: [
+          %EmailBody{blob_id: "blob123", type: "text/plain"},
+          %EmailBody{blob_id: "blob124", type: "text/plain"}
+        ],
+        html_body: [],
         attachments: [],
-        thread_id: "thread123"
+        thread_id: "thread123",
+        original_quote: nil
       }
   """
   def new(data) do
+    text_parts = process_body_parts(data["textBody"])
+    html_parts = process_body_parts(data["htmlBody"])
+
     %__MODULE__{
       id: data["id"],
       subject: data["subject"],
       from: Enum.map(data["from"] || [], &new_email_address/1),
       to: Enum.map(data["to"] || [], &new_email_address/1),
       received_at: data["receivedAt"],
-      text_body: new_email_body(data["textBody"]),
-      html_body: new_email_body(data["htmlBody"]),
+      text_body: text_parts.main_parts,
+      html_body: html_parts.main_parts,
       attachments: Enum.map(data["attachments"] || [], &new_attachment/1),
-      thread_id: data["threadId"]
+      thread_id: data["threadId"],
+      original_quote: html_parts.original_quote
     }
+  end
+
+  defp process_body_parts(nil), do: %{main_parts: [], original_quote: nil}
+  defp process_body_parts([]), do: %{main_parts: [], original_quote: nil}
+
+  defp process_body_parts(parts) when is_list(parts) do
+    text_parts = Enum.filter(parts, &(&1["type"] == "text/plain"))
+
+    original_quote = if length(text_parts) > 1, do: List.last(text_parts), else: nil
+
+    # Convert all parts to EmailBody structs
+    all_parts = Enum.map(parts, &new_email_body/1)
+
+    %{
+      main_parts: all_parts,
+      original_quote: if(original_quote, do: new_email_body(original_quote), else: nil)
+    }
+  end
+
+  defp process_body_parts(part) when is_map(part) do
+    process_body_parts([part])
   end
 
   defp new_email_address(data) when is_map(data) do
@@ -164,10 +199,6 @@ defmodule Jmap.Email do
       email: data["email"]
     }
   end
-
-  defp new_email_body(nil), do: nil
-  defp new_email_body([]), do: nil
-  defp new_email_body([body | _]) when is_map(body), do: new_email_body(body)
 
   defp new_email_body(data) when is_map(data) do
     %EmailBody{

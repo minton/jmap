@@ -64,25 +64,37 @@ defmodule Jmap do
       }
     ],
     received_at: "2024-03-20T15:30:00Z",
-    text_body: %Jmap.Email.EmailBody{
-      blob_id: "blob_123",
-      type: "text/plain",
-      charset: "utf-8",
-      part_id: "part1",
-      size: 423,
-      contents: "Hi Jane,\n\nJust confirming our meeting tomorrow at 2pm.\n\nBest regards,\nJohn"
-    },
-    html_body: %Jmap.Email.EmailBody{
-      blob_id: "blob_124",
-      type: "text/html",
-      charset: "utf-8",
-      part_id: "part2",
-      size: 628,
-      contents: "<div><p>Hi Jane,</p><p>Just confirming our meeting tomorrow at 2pm.</p><p>Best regards,<br>John</p></div>"
-    },
+    text_body: [
+      %Jmap.Email.EmailBody{
+        blob_id: "blob_123",
+        type: "text/plain",
+        charset: "utf-8",
+        part_id: "part1",
+        size: 423,
+        contents: "Hi Jane,\n\nJust confirming our meeting tomorrow at 2pm.\n\nBest regards,\nJohn"
+      },
+      %Jmap.Email.EmailBody{
+        blob_id: "blob_124",
+        type: "text/plain",
+        charset: "utf-8",
+        part_id: "part2",
+        size: 256,
+        contents: "> On Thu, Mar 21, 2024 at 10:00 AM Jane Doe <jane@example.com> wrote:\n> > Hi John,\n> > \n> > Let's meet tomorrow at 2pm."
+      }
+    ],
+    html_body: [
+      %Jmap.Email.EmailBody{
+        blob_id: "blob_125",
+        type: "text/html",
+        charset: "utf-8",
+        part_id: "part3",
+        size: 628,
+        contents: "<div><p>Hi Jane,</p><p>Just confirming our meeting tomorrow at 2pm.</p><p>Best regards,<br>John</p></div>"
+      }
+    ],
     attachments: [
       %Jmap.Email.Attachment{
-        blob_id: "blob_125",
+        blob_id: "blob_126",
         type: "application/pdf",
         name: "agenda.pdf",
         size: 125_840,
@@ -90,7 +102,15 @@ defmodule Jmap do
         contents: <<...>>  # Binary content
       }
     ],
-    thread_id: "thread_789"
+    thread_id: "thread_789",
+    original_quote: %Jmap.Email.EmailBody{
+      blob_id: "blob_124",
+      type: "text/plain",
+      charset: "utf-8",
+      part_id: "part2",
+      size: 256,
+      contents: "> On Thu, Mar 21, 2024 at 10:00 AM Jane Doe <jane@example.com> wrote:\n> > Hi John,\n> > \n> > Let's meet tomorrow at 2pm."
+    }
   }
   ```
 
@@ -145,7 +165,20 @@ defmodule Jmap do
 
   ## Examples
       iex> Jmap.get_next_mail(client)
-      {:ok, %Jmap.Email{subject: "Hello", text_body: %{contents: "Hello world"}}}
+      {:ok, %Jmap.Email{
+        subject: "Hello",
+        text_body: [
+          %{contents: "Hello world", type: "text/plain"},
+          %{contents: "> Previous message", type: "text/plain"}
+        ],
+        html_body: [
+          %{contents: "<p>Hello world</p>", type: "text/html"}
+        ],
+        original_quote: %{
+          contents: "> On Thu, Mar 21, 2024 at 10:00 AM John Doe <john@example.com> wrote:\n> > Hi there,\n> > \n> > This is the original message.",
+          type: "text/plain"
+        }
+      }}
       iex> Jmap.get_next_mail(client)
       {:error, "Inbox empty"}
   """
@@ -182,9 +215,22 @@ defmodule Jmap do
 
   ## Examples
       iex> Jmap.get_email(client, "email123")
-      {:ok, %Jmap.Email{subject: "Hello", text_body: %{contents: "Hello world"}}}
+      {:ok, %Jmap.Email{
+        subject: "Hello",
+        text_body: [
+          %{contents: "Hello world", type: "text/plain"},
+          %{contents: "> Previous message", type: "text/plain"}
+        ],
+        html_body: [
+          %{contents: "<p>Hello world</p>", type: "text/html"}
+        ],
+        original_quote: %{
+          contents: "> On Thu, Mar 21, 2024 at 10:00 AM John Doe <john@example.com> wrote:\n> > Hi there,\n> > \n> > This is the original message.",
+          type: "text/plain"
+        }
+      }}
       iex> Jmap.get_email(client, "email123")
-      {:error, "Inbox empty"}
+      {:error, "Email not found"}
   """
   def get_email(client, email_id) do
     with {:ok, email_data} <- fetch_email(client, email_id),
@@ -195,26 +241,56 @@ defmodule Jmap do
   end
 
   defp populate_email_contents(email, client) do
-    with {:ok, text_body} <- fetch_text_body(email.text_body, client),
-         {:ok, html_body} <- fetch_html_body(email.html_body, client),
+    with {:ok, text_bodies} <- fetch_text_bodies(email.text_body, client),
+         {:ok, html_bodies} <- fetch_html_bodies(email.html_body, client),
          {:ok, attachments} <- fetch_attachment_contents(email.attachments, client),
-         {:ok, html_body_with_images} <- inline_images(html_body, attachments) do
+         {:ok, html_bodies_with_images} <- inline_images_in_bodies(html_bodies, attachments),
+         {:ok, original_quote} <- fetch_original_quote(email.original_quote, client) do
       {:ok,
-       %{email | text_body: text_body, html_body: html_body_with_images, attachments: attachments}}
+       %{
+         email
+         | text_body: text_bodies,
+           html_body: html_bodies_with_images,
+           attachments: attachments,
+           original_quote: original_quote
+       }}
     end
   end
 
-  defp fetch_text_body(nil, _client), do: {:ok, nil}
-  defp fetch_text_body(body, client), do: fetch_body_content(body, client)
+  defp fetch_original_quote(nil, _client), do: {:ok, nil}
+  defp fetch_original_quote(quote, client), do: fetch_body_content(quote, client)
 
-  defp fetch_html_body(nil, _client), do: {:ok, nil}
-  defp fetch_html_body(body, client), do: fetch_body_content(body, client)
+  defp fetch_text_bodies(bodies, client) when is_list(bodies) do
+    Enum.reduce_while(bodies, {:ok, []}, fn body, {:ok, acc} ->
+      case fetch_body_content(body, client) do
+        {:ok, body_with_content} -> {:cont, {:ok, [body_with_content | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, acc} -> {:ok, Enum.reverse(acc)}
+      error -> error
+    end
+  end
+
+  defp fetch_html_bodies(bodies, client) when is_list(bodies) do
+    Enum.reduce_while(bodies, {:ok, []}, fn body, {:ok, acc} ->
+      case fetch_body_content(body, client) do
+        {:ok, body_with_content} -> {:cont, {:ok, [body_with_content | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, acc} -> {:ok, Enum.reverse(acc)}
+      error -> error
+    end
+  end
 
   defp fetch_body_content(body, client) do
     case fetch_blob(client, body.blob_id) do
       {:ok, content} ->
         content =
-          if body.type == "text/html" do
+          if body.type == "text/html" or body.type == "text/plain" do
             StringHelper.sanitize_printable(content)
           else
             content
@@ -250,21 +326,25 @@ defmodule Jmap do
     end
   end
 
-  defp inline_images(nil, _attachments), do: {:ok, nil}
-
-  defp inline_images(html_body, attachments) do
+  defp inline_images_in_bodies(bodies, attachments) when is_list(bodies) do
     inline_attachments = Enum.filter(attachments, &(&1.disposition == "inline" && &1.cid))
-    content = html_body.contents
 
-    content_with_images =
-      Enum.reduce(inline_attachments, content, fn attachment, acc ->
-        cid = attachment.cid
-        base64 = Base.encode64(attachment.contents)
-        mime_type = attachment.type
-        replacement = "data:#{mime_type};base64,#{base64}"
-        String.replace(acc, "cid:#{cid}", replacement)
+    bodies_with_images =
+      Enum.map(bodies, fn body ->
+        content = body.contents
+
+        content_with_images =
+          Enum.reduce(inline_attachments, content, fn attachment, acc ->
+            cid = attachment.cid
+            base64 = Base.encode64(attachment.contents)
+            mime_type = attachment.type
+            replacement = "data:#{mime_type};base64,#{base64}"
+            String.replace(acc, "cid:#{cid}", replacement)
+          end)
+
+        %{body | contents: content_with_images}
       end)
 
-    {:ok, %{html_body | contents: content_with_images}}
+    {:ok, bodies_with_images}
   end
 end

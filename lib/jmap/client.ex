@@ -165,12 +165,36 @@ defmodule Jmap.Client do
     - email_id: The ID of the email to fetch
 
   ## Returns
-    * `{:ok, email}` - on success
+    * `{:ok, email}` - on success, where email contains:
+      - id: The email ID
+      - subject: The email subject
+      - from: List of sender email addresses
+      - to: List of recipient email addresses
+      - receivedAt: Timestamp when the email was received
+      - textBody: List of text/plain body parts
+      - htmlBody: List of text/html body parts
+      - attachments: List of attachments
+      - threadId: The thread ID this email belongs to
     * `{:error, reason}` - on failure
 
   ## Examples
       iex> Jmap.Client.fetch_email(client, "email123")
-      {:ok, %{"subject" => "Hello", "textBody" => "Content..."}}
+      {:ok, %{
+        "id" => "email123",
+        "subject" => "Hello",
+        "from" => [%{"email" => "sender@example.com", "name" => "Sender"}],
+        "to" => [%{"email" => "recipient@example.com", "name" => "Recipient"}],
+        "receivedAt" => "2024-01-01T00:00:00Z",
+        "textBody" => [
+          %{"blobId" => "blob123", "type" => "text/plain"},
+          %{"blobId" => "blob124", "type" => "text/plain"}
+        ],
+        "htmlBody" => [
+          %{"blobId" => "blob125", "type" => "text/html"}
+        ],
+        "attachments" => [],
+        "threadId" => "thread123"
+      }}
   """
   def fetch_email(client, email_id) do
     request = %{
