@@ -11,13 +11,18 @@ defmodule Jmap do
 
   ## Configuration
 
-  In order to use JMAP, you'll need to configure a JMAP provider and token.
+  In order to use JMAP, you'll need to configure a JMAP provider, token, and options.
 
   ```elixir
   config :jmap,
     provider: "fastmail",
-    api_token: "your_api_token"
+    api_token: "your_api_token",
+    opts: [inline_images: true]
   ```
+
+  ### Options
+
+  - `inline_images`: Whether the inline images in the email body are converted to base64 and embedded in the email body. Defaults to `true`.
 
   ### HTTP Client
 
@@ -289,13 +294,6 @@ defmodule Jmap do
   defp fetch_body_content(body, client) do
     case fetch_blob(client, body.blob_id) do
       {:ok, content} ->
-        content =
-          if body.type == "text/html" or body.type == "text/plain" do
-            StringHelper.sanitize_printable(content)
-          else
-            content
-          end
-
         {:ok, %{body | contents: content}}
 
       {:error, reason} ->
@@ -327,24 +325,31 @@ defmodule Jmap do
   end
 
   defp inline_images_in_bodies(bodies, attachments) when is_list(bodies) do
-    inline_attachments = Enum.filter(attachments, &(&1.disposition == "inline" && &1.cid))
+    inline_images_enabled =
+      Application.get_env(:jmap, :opts, []) |> Keyword.get(:inline_images, true)
 
-    bodies_with_images =
-      Enum.map(bodies, fn body ->
-        content = body.contents
+    if not inline_images_enabled do
+      {:ok, bodies}
+    else
+      inline_attachments = Enum.filter(attachments, &(&1.disposition == "inline" && &1.cid))
 
-        content_with_images =
-          Enum.reduce(inline_attachments, content, fn attachment, acc ->
-            cid = attachment.cid
-            base64 = Base.encode64(attachment.contents)
-            mime_type = attachment.type
-            replacement = "data:#{mime_type};base64,#{base64}"
-            String.replace(acc, "cid:#{cid}", replacement)
-          end)
+      bodies_with_images =
+        Enum.map(bodies, fn body ->
+          content = body.contents
 
-        %{body | contents: content_with_images}
-      end)
+          content_with_images =
+            Enum.reduce(inline_attachments, content, fn attachment, acc ->
+              cid = attachment.cid
+              base64 = Base.encode64(attachment.contents)
+              mime_type = attachment.type
+              replacement = "data:#{mime_type};base64,#{base64}"
+              String.replace(acc, "cid:#{cid}", replacement)
+            end)
 
-    {:ok, bodies_with_images}
+          %{body | contents: content_with_images}
+        end)
+
+      {:ok, bodies_with_images}
+    end
   end
 end
