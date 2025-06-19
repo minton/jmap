@@ -2,7 +2,7 @@ defmodule Jmap.MixProject do
   use Mix.Project
 
   @github_url "https://github.com/minton/jmap"
-  @version "0.0.3"
+  @version "0.0.4"
 
   def project do
     [
