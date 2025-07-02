@@ -21,7 +21,7 @@ defmodule Jmap.Email.EmailBody do
           charset: String.t() | nil,
           cid: String.t() | nil,
           disposition: String.t() | nil,
-          language: String.t() | nil,
+          language: [String.t()] | nil,
           location: String.t() | nil,
           name: String.t() | nil,
           part_id: String.t(),

@@ -53,7 +53,7 @@ defmodule Jmap.Email do
   - charset: Character encoding of the content
   - cid: Content-ID for inline attachments
   - disposition: How the content should be displayed
-  - language: Content language code
+  - language: The list of language tags
   - location: URI indicating where the content can be found
   - name: Optional name for the content part
   - part_id: Identifier for this specific email part
@@ -66,7 +66,7 @@ defmodule Jmap.Email do
           charset: String.t() | nil,
           cid: String.t() | nil,
           disposition: String.t() | nil,
-          language: String.t() | nil,
+          language: [String.t()] | nil,
           location: String.t() | nil,
           name: String.t() | nil,
           part_id: String.t(),
@@ -206,7 +206,7 @@ defmodule Jmap.Email do
       charset: data["charset"],
       cid: data["cid"],
       disposition: data["disposition"],
-      language: data["language"],
+      language: List.wrap(data["language"]),
       location: data["location"],
       name: data["name"],
       part_id: data["partId"],
